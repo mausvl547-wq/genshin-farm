@@ -1,0 +1,10 @@
+genshin_farm/
+├── app.py              # Flask веб-приложение
+├── bot.py              # Telegram бот
+├── database.db
+├── requirements.txt
+└── templates/
+    ├── base.html
+    ├── dashboard.html
+    ├── admin.html
+    └── login.html
