@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Панель - Genshin Farm{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card p-3">
+            <h3 class="text-gold">Привет, {{ user.username }}!</h3>
+            <p>Баланс: <strong>{{ user.balance }}₽</strong> | Всего заработано: <strong>{{ user.total_earned }}₽</strong></p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <h4 class="text-gold">Доступные заказы</h4>
+        {% for order in available %}
+        <div class="card p-3 mb-3">
+            <h5>{{ order.title }}</h5>
+            <p class="mb-1">{{ order.description }}</p>
+            <p class="text-success fw-bold">{{ order.reward }}₽</p>
+            <a href="{{ url_for('take_order', order_id=order.id) }}" class="btn btn-genshin">Взять заказ</a>
+        </div>
+        {% else %}
+        <p class="text-muted">Нет доступных заказов</p>
+        {% endfor %}
+    </div>
+
+    <div class="col-md-6">
+        <h4 class="text-gold">Мои заказы</h4>
+        {% for order in my_orders %}
+        <div class="card p-3 mb-3">
+            <h5>{{ order.title }}</h5>
+            <p class="text-success fw-bold">{{ order.reward }}₽</p>
+            <a href="{{ url_for('complete_order', order_id=order.id) }}" class="btn btn-success">Выполнить</a>
+        </div>
+        {% else %}
+        <p class="text-muted">Нет активных заказов</p>
+        {% endfor %}
+
+        <h4 class="text-gold mt-4">Выполненные</h4>
+        {% for order in completed_orders %}
+        <div class="card p-3 mb-2" style="opacity: 0.7;">
+            <small>{{ order.title }} - {{ order.reward }}₽</small>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

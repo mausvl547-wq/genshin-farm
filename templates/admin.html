@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Админка - Genshin Farm{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card p-3">
+            <h3 class="text-gold">Админ-панель</h3>
+            <p>Пользователей: <strong>{{ stats.total_users }}</strong> | Заказов: <strong>{{ stats.total_orders }}</strong> | Выполнено: <strong>{{ stats.completed_orders }}</strong></p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card p-3 mb-4">
+            <h4>Добавить заказ</h4>
+            <form method="POST" action="{{ url_for('add_order') }}">
+                <div class="mb-2">
+                    <input type="text" name="title" class="form-control" placeholder="Название" required>
+                </div>
+                <div class="mb-2">
+                    <textarea name="description" class="form-control" placeholder="Описание" required></textarea>
+                </div>
+                <div class="mb-2">
+                    <input type="number" name="reward" class="form-control" placeholder="Цена" step="0.01" required>
+                </div>
+                <button type="submit" class="btn btn-genshin">Добавить заказ</button>
+            </form>
+        </div>
+
+        <h4>Все заказы</h4>
+        {% for order in orders %}
+        <div class="card p-3 mb-2">
+            <h5>{{ order.title }}</h5>
+            <p class="mb-1">{{ order.description[:100] }}...</p>
+            <small class="text-muted">{{ order.reward }}₽ - {{ order.status }}</small>
+            <a href="{{ url_for('delete_order', order_id=order.id) }}" class="btn btn-sm btn-danger float-end">Удалить</a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="col-md-6">
+        <div class="card p-3 mb-4">
+            <h4>Добавить качера</h4>
+            <form method="POST" action="{{ url_for('add_user') }}" class="row g-2">
+                <div class="col-5">
+                    <input type="email" name="email" class="form-control" placeholder="Email" required>
+                </div>
+                <div class="col-5">
+                    <input type="text" name="username" class="form-control" placeholder="Имя" required>
+                </div>
+                <div class="col-2">
+                    <button type="submit" class="btn btn-genshin w-100">Создать</button>
+                </div>
+            </form>
+            <small class="text-muted mt-2">Пароль отобразится после создания</small>
+        </div>
+
+        <h4>Пользователи</h4>
+        {% for u in users %}
+        <div class="card p-3 mb-2">
+            <p class="mb-1"><strong>{{ u.username }}</strong> ({{ u.email }})</p>
+            <small>Заработано: {{ u.total_earned }}₽ | К выплате: {{ u.balance }}₽</small>
+            <div class="mt-2">
+                <a href="{{ url_for('reset_password', user_id=u.id) }}" class="btn btn-sm btn-warning">Сброс</a>
+                <a href="{{ url_for('delete_user', user_id=u.id) }}" class="btn btn-sm btn-danger" onclick="return confirm('Удалить?')">Удалить</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
