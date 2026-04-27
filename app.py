@@ -1,14 +1,24 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import secrets
 import re
+import os  # ДОБАВЛЕНО: для работы с переменными окружения
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'genshin-super-secret-key-2025'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ДОБАВЛЕНО ДЛЯ RENDER) =======================
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
+# Если на Render - используем PostgreSQL, если локально - SQLite
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
+
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -286,6 +296,96 @@ def api_stats():
     }
     return jsonify(stats)
 
+# ======================= API ДЛЯ БОТА (НОВЫЕ ФУНКЦИИ) =======================
+@app.route('/api/bot/order_info/<int:order_id>', methods=['GET'])
+def api_order_info(order_id):
+    """Информация о заказе: кто взял, статус"""
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({'error': 'Заказ не найден'}), 404
+    
+    result = {
+        'id': order.id,
+        'title': order.title,
+        'description': order.description,
+        'reward': order.reward,
+        'status': order.status,
+        'funpay_url': order.funpay_url
+    }
+    
+    if order.taken_by:
+        user = User.query.get(order.taken_by)
+        result['taken_by'] = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email
+        }
+        result['taken_at'] = order.taken_at.strftime('%Y-%m-%d %H:%M:%S') if order.taken_at else None
+    
+    if order.completed_at:
+        result['completed_at'] = order.completed_at.strftime('%Y-%m-%d %H:%M:%S')
+    
+    return jsonify(result)
+
+@app.route('/api/bot/user_stats/<int:user_id>', methods=['GET'])
+def api_user_stats(user_id):
+    """Статистика пользователя по ID"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    
+    # Заказы пользователя
+    taken_orders = Order.query.filter_by(taken_by=user_id, status='taken').count()
+    completed_orders = Order.query.filter_by(taken_by=user_id, status='completed').count()
+    
+    return jsonify({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'total_earned': user.total_earned,
+        'balance': user.balance,
+        'paid_out': user.paid_out,
+        'taken_orders': taken_orders,
+        'completed_orders': completed_orders
+    })
+
+@app.route('/api/bot/active_orders', methods=['GET'])
+def api_active_orders():
+    """Все активные заказы (кто взял)"""
+    orders = Order.query.filter(Order.status.in_(['new', 'taken'])).all()
+    result = []
+    
+    for order in orders:
+        order_data = {
+            'id': order.id,
+            'title': order.title,
+            'reward': order.reward,
+            'status': order.status
+        }
+        
+        if order.taken_by:
+            user = User.query.get(order.taken_by)
+            order_data['taken_by'] = user.username if user else 'Неизвестно'
+        
+        result.append(order_data)
+    
+    return jsonify(result)
+
+@app.route('/api/bot/top_chers', methods=['GET'])
+def api_top_chers():
+    """Топ качеров по заработку"""
+    chers = User.query.filter_by(role='cher').order_by(User.total_earned.desc()).limit(10).all()
+    result = []
+    
+    for cher in chers:
+        result.append({
+            'username': cher.username,
+            'total_earned': cher.total_earned,
+            'completed_orders': Order.query.filter_by(taken_by=cher.id, status='completed').count()
+        })
+    
+    return jsonify(result)
+
 # ======================= ИНИЦИАЛИЗАЦИЯ =======================
 def init_db():
     with app.app_context():
@@ -320,4 +420,5 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
