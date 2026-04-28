@@ -1,4 +1,4 @@
-# bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ 100%)
+# bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import os
 import requests
 import asyncio
@@ -17,35 +17,30 @@ FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
 app_web = Flask(__name__)
 
 @app_web.route('/')
-def health_check():
-    return "🤖 Bot is running!", 200
-
-@app_web.route('/health')
 def health():
     return "OK", 200
 
-# ============= ТЕЛЕГРАМ БОТ =============
+@app_web.route('/webhook')
+def webhook_info():
+    return "Bot is running", 200
+
+# ============= ЛОГИКА БОТА =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    
     if user_id in ADMIN_IDS:
         await update.message.reply_text(
             "🌟 *Genshin Farm Bot*\n\n"
-            "📌 *Доступные команды:*\n"
-            "• Отправь ссылку на FunPay - я добавлю заказ\n"
-            "• Отправь ID заказа - узнаю кто взял\n\n"
-            "📌 *Пример ссылки:*\n"
-            "https://funpay.com/orders/12345\n\n"
-            "📌 *Пример ID:*\n"
-            "5",
+            "📌 Отправь ссылку на FunPay - я добавлю заказ\n"
+            "📌 Отправь ID заказа - узнаю кто взял\n\n"
+            "Пример ссылки: https://funpay.com/orders/123\n"
+            "Пример ID: 5",
             parse_mode='Markdown'
         )
     else:
-        await update.message.reply_text("❌ У вас нет доступа к этому боту")
+        await update.message.reply_text("❌ Нет доступа")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Нет доступа")
         return
@@ -62,13 +57,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await add_order_by_url(update, text)
         return
     
-    await update.message.reply_text(
-        "❌ Отправь ссылку на FunPay (например, https://funpay.com/orders/12345)\n"
-        "или ID заказа (например, 5)"
-    )
+    await update.message.reply_text("❌ Отправь ссылку на FunPay или ID заказа")
 
 async def add_order_by_url(update: Update, url: str):
-    await update.message.reply_text("🔄 Создаю заказ...")
+    await update.message.reply_text("🔄 Добавляю заказ...")
     
     order_data = {
         'title': 'Заказ с FunPay',
@@ -89,9 +81,9 @@ async def add_order_by_url(update: Update, url: str):
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(f"❌ Ошибка: {response.text}")
+            await update.message.reply_text(f"❌ Ошибка API: {response.status_code}")
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка подключения к серверу: {str(e)}")
+        await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 async def check_order_by_id(update: Update, order_id: int):
     try:
@@ -107,12 +99,10 @@ async def check_order_by_id(update: Update, order_id: int):
             message += f"📋 *Название:* {order['title']}\n"
             message += f"💰 *Цена:* {order['reward']}₽\n"
             message += f"📊 *Статус:* {status_text}\n"
-            message += f"📝 *Описание:* {order['description'][:150]}...\n"
+            message += f"📝 *Описание:* {order['description'][:100]}...\n"
             
             if order.get('taken_by'):
                 message += f"\n👤 *Взял:* {order['taken_by']['username']}\n"
-                if order.get('taken_at'):
-                    message += f"⏰ *Время:* {order['taken_at']}\n"
             
             await update.message.reply_text(message, parse_mode='Markdown')
         else:
@@ -131,17 +121,16 @@ async def run_bot():
     print("=" * 50)
     print(f"👑 Админы: {ADMIN_IDS}")
     print(f"🌐 API URL: {FLASK_API_URL}")
-    print(f"🔑 Токен бота: {BOT_TOKEN[:20]}...")
     print("=" * 50)
     
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # КРИТИЧЕСКИ ВАЖНО: удаляем старый вебхук
+    # ПРИНУДИТЕЛЬНО удаляем вебхук (самое важное!)
     try:
-        await app.bot.delete_webhook()
-        print("✅ Старый вебхук удален")
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Вебхук успешно удалён")
     except Exception as e:
         print(f"⚠️ Ошибка удаления вебхука: {e}")
     
