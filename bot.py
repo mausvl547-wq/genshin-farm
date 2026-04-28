@@ -1,4 +1,4 @@
-# bot.py - ПОЛНАЯ ВЕРСИЯ С РУЧНЫМ ВВОДОМ ДАННЫХ
+# bot.py - ФИНАЛЬНАЯ РАБОЧАЯ ВЕРСИЯ
 import os
 import requests
 import asyncio
@@ -33,8 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🌟 *Genshin Farm Bot*\n\n"
             "📌 *Доступные команды:*\n"
             "• /start - Главное меню\n"
-            "• /new - Создать новый заказ\n"
-            "• Отправь ID заказа - узнать кто взял\n\n"
+            "• /new - Создать новый заказ\n\n"
             "👇 *Используй кнопки ниже:*",
             parse_mode='Markdown',
             reply_markup=get_main_keyboard()
@@ -43,18 +42,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Нет доступа")
 
 async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начать создание нового заказа"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Нет доступа")
         return
     
+    context.user_data.clear()
     context.user_data['order_step'] = 'title'
     await update.message.reply_text(
         "📝 *Создание нового заказа*\n\n"
         "**Шаг 1 из 4:** Введи *название* заказа\n\n"
-        "Пример: `Фарм скарабеев x10`",
+        "Пример: `Фарм скарабеев x10`\n\n"
+        "Для отмены отправь /cancel",
         parse_mode='Markdown'
+    )
+
+async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Нет доступа")
+        return
+    
+    context.user_data.clear()
+    await update.message.reply_text(
+        "❌ Создание заказа отменено",
+        reply_markup=get_main_keyboard()
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -70,6 +82,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not step:
         if text.isdigit():
             await check_order_by_id(update, int(text))
+            return
         elif "funpay.com" in text:
             # Если отправлена ссылка, начинаем создание заказа
             context.user_data['funpay_url'] = text
@@ -80,12 +93,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "**Шаг 1 из 4:** Введи *название* заказа",
                 parse_mode='Markdown'
             )
+            return
         else:
             await update.message.reply_text(
                 "❌ Отправь ID заказа (цифру) или нажми кнопку 'Создать заказ'",
                 reply_markup=get_main_keyboard()
             )
-        return
+            return
     
     # Режим создания заказа
     if step == 'title':
@@ -110,7 +124,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ Цена: *{price}₽*\n\n"
                 "**Шаг 3 из 4:** Введи *описание* заказа\n\n"
                 "Что нужно сделать? Какие ресурсы фармить?\n\n"
-                "Пример: `Собрать 10 скарабеев в пустыне Сумеру. Старт от пирамиды.`",
+                "Пример: `Собрать 10 скарабеев в пустыне Сумеру`",
                 parse_mode='Markdown'
             )
         except ValueError:
@@ -121,7 +135,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['order_step'] = 'url'
         await update.message.reply_text(
             f"✅ Описание сохранено\n\n"
-            "**Шаг 4 из 4:** Отправь *ссылку на FunPay* (или нажми /skip если нет ссылки)\n\n"
+            "**Шаг 4 из 4:** Отправь *ссылку на FunPay* (или отправь /skip если нет ссылки)\n\n"
             "Пример: `https://funpay.com/orders/12345`",
             parse_mode='Markdown'
         )
@@ -131,7 +145,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await create_final_order(update, context, funpay_url)
 
 async def skip_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пропустить добавление ссылки"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Нет доступа")
@@ -140,7 +153,6 @@ async def skip_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await create_final_order(update, context, '')
 
 async def create_final_order(update: Update, context: ContextTypes.DEFAULT_TYPE, funpay_url: str):
-    """Создание заказа в базе данных"""
     title = context.user_data.get('order_title')
     price = context.user_data.get('order_price')
     description = context.user_data.get('order_description')
@@ -151,7 +163,6 @@ async def create_final_order(update: Update, context: ContextTypes.DEFAULT_TYPE,
         context.user_data.clear()
         return
     
-    # Добавляем ссылку в описание если есть
     full_description = description
     if url:
         full_description += f"\n\n🔗 Ссылка: {url}"
@@ -170,12 +181,11 @@ async def create_final_order(update: Update, context: ContextTypes.DEFAULT_TYPE,
         if response.status_code == 200:
             data = response.json()
             await update.message.reply_text(
-                f"✅ *Заказ успешно создан!*\n\n"
+                f"✅ *Заказ создан!*\n\n"
                 f"📋 *Название:* {title}\n"
                 f"💰 *Цена:* {price}₽\n"
                 f"📝 *Описание:* {description[:100]}...\n\n"
-                f"🆔 *ID заказа:* `{data.get('order_id')}`\n\n"
-                f"💡 Теперь качеры могут взять его в работу!",
+                f"🆔 *ID:* `{data.get('order_id')}`",
                 parse_mode='Markdown',
                 reply_markup=get_main_keyboard()
             )
@@ -184,24 +194,9 @@ async def create_final_order(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
     
-    # Очищаем данные
     context.user_data.clear()
-
-async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена создания заказа"""
-    user_id = update.effective_user.id
-    if user_id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Нет доступа")
-        return
-    
-    context.user_data.clear()
-    await update.message.reply_text(
-        "❌ Создание заказа отменено",
-        reply_markup=get_main_keyboard()
-    )
 
 async def check_order_by_id(update: Update, order_id: int):
-    """Проверка заказа по ID"""
     try:
         response = requests.get(f"{FLASK_API_URL}/order_info/{order_id}", timeout=5)
         
@@ -215,7 +210,7 @@ async def check_order_by_id(update: Update, order_id: int):
             message += f"📋 *Название:* {order['title']}\n"
             message += f"💰 *Цена:* {order['reward']}₽\n"
             message += f"📊 *Статус:* {status_text}\n"
-            message += f"📝 *Описание:* {order['description'][:200]}...\n"
+            message += f"📝 *Описание:* {order['description'][:150]}...\n"
             
             if order.get('taken_by'):
                 message += f"\n👤 *Взял:* {order['taken_by']['username']}\n"
@@ -223,12 +218,10 @@ async def check_order_by_id(update: Update, order_id: int):
             await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
         else:
             await update.message.reply_text(f"❌ Заказ #{order_id} не найден", reply_markup=get_main_keyboard())
-            
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {str(e)}")
 
 async def active_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать активные заказы"""
     query = update.callback_query
     await query.answer()
     
@@ -258,9 +251,7 @@ async def active_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for order in taken_orders[:5]:
                     taken_by = order.get('taken_by', 'Неизвестно')
                     message += f"• #{order['id']} - {order['title'][:30]}... - {order['reward']}₽ 👤 {taken_by}\n"
-                message += "\n"
             
-            message += "💡 Отправь ID заказа (цифру) для подробностей"
             await query.edit_message_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
         else:
             await query.edit_message_text("❌ Ошибка", reply_markup=get_main_keyboard())
@@ -268,7 +259,6 @@ async def active_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"❌ Ошибка: {str(e)}", reply_markup=get_main_keyboard())
 
 async def search_order_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Запрос ID заказа"""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
@@ -279,7 +269,6 @@ async def search_order_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data['awaiting_order_id'] = True
 
 async def handle_search_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ввода ID для поиска"""
     if context.user_data.get('awaiting_order_id'):
         user_id = update.effective_user.id
         if user_id not in ADMIN_IDS:
@@ -294,14 +283,19 @@ async def handle_search_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         context.user_data['awaiting_order_id'] = False
 
+async def create_order_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await new_order(update, context)
+
 # ============= ЗАПУСК =============
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    app_web.run(host='0.0.0.0', port=port)
+
 if __name__ == '__main__':
+    # Запускаем Flask в отдельном потоке
     from threading import Thread
-    
-    def run_flask():
-        port = int(os.environ.get('PORT', 10000))
-        app_web.run(host='0.0.0.0', port=port)
-    
     flask_thread = Thread(target=run_flask)
     flask_thread.start()
     
@@ -312,35 +306,28 @@ if __name__ == '__main__':
     print(f"🌐 API URL: {FLASK_API_URL}")
     print("=" * 50)
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # Создаем приложение
+    app = Application.builder().token(BOT_TOKEN).build()
     
-    async def setup_and_run():
-        app = Application.builder().token(BOT_TOKEN).build()
-        
+    # Добавляем обработчики
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("new", new_order))
+    app.add_handler(CommandHandler("skip", skip_url))
+    app.add_handler(CommandHandler("cancel", cancel_order))
+    
+    app.add_handler(CallbackQueryHandler(active_orders, pattern="active_orders"))
+    app.add_handler(CallbackQueryHandler(search_order_prompt, pattern="search_order"))
+    app.add_handler(CallbackQueryHandler(create_order_callback, pattern="create_order"))
+    
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_text))
+    
+    # Удаляем вебхук и запускаем
+    async def main():
         await app.bot.delete_webhook(drop_pending_updates=True)
         await app.bot.log_out()
         print("✅ Вебхук удалён и сессии завершены")
-        
-        # Команды
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("new", new_order))
-        app.add_handler(CommandHandler("skip", skip_url))
-        app.add_handler(CommandHandler("cancel", cancel_order))
-        
-        # Callback кнопки
-        app.add_handler(CallbackQueryHandler(active_orders, pattern="active_orders"))
-        app.add_handler(CallbackQueryHandler(search_order_prompt, pattern="search_order"))
-        app.add_handler(CallbackQueryHandler(new_order, pattern="create_order"))
-        
-        # Обработчики текста
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search_text))
-        
         print("✅ БОТ ЗАПУЩЕН! Ожидание сообщений...")
         await app.run_polling()
     
-    try:
-        loop.run_until_complete(setup_and_run())
-    except KeyboardInterrupt:
-        print("🛑 Бот остановлен")
+    asyncio.run(main())
