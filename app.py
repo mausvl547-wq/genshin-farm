@@ -12,7 +12,7 @@ import os
 
 app = Flask(__name__)
 
-# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ - МАКСИМАЛЬНО ЖЕСТКИЙ ВАРИАНТ =======================
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ =======================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
@@ -22,25 +22,16 @@ if not DATABASE_URL:
     DATABASE_URL = 'sqlite:///database.db'
     engine = create_engine(DATABASE_URL, poolclass=NullPool, pool_pre_ping=True)
 else:
-    # Для PostgreSQL: принудительно создаем engine с NullPool и отключаем pooling
+    # Для PostgreSQL: принудительно создаем engine с NullPool
     engine = create_engine(
         DATABASE_URL,
         poolclass=NullPool,      # Отключаем кэширование соединений
-        pool_pre_ping=True,      # Проверяем соединение перед каждым запросом
-        pool_size=1,             # Размер пула 1 (максимум)
-        max_overflow=0,          # Без дополнительных соединений
-        pool_timeout=30          # Таймаут ожидания соединения
+        pool_pre_ping=True       # Проверяем соединение перед каждым запросом
     )
 
-# Настраиваем приложение на использование созданного engine
+# Настраиваем приложение
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'poolclass': NullPool,
-    'pool_pre_ping': True,
-    'pool_size': 1,
-    'max_overflow': 0
-}
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
 # ВАЖНО: Переопределяем db, чтобы он использовал наш engine
