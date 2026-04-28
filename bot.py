@@ -1,9 +1,9 @@
-# bot.py - ФИНАЛЬНАЯ СТАБИЛЬНАЯ ВЕРСИЯ
+# bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import os
 import requests
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 BOT_TOKEN = "8789024886:AAEoJN_Z1KqIQyiCgPsPgo6iGNpE-JvixHc"
 ADMIN_IDS = [1288498341, 6893022735]
@@ -172,7 +172,7 @@ async def check_order(update, order_id):
     except:
         await update.message.reply_text("❌ Ошибка")
 
-async def active_orders_callback(update, context):
+async def active_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     try:
@@ -188,16 +188,16 @@ async def active_orders_callback(update, context):
             await query.edit_message_text(msg, parse_mode='Markdown', reply_markup=get_main_keyboard())
         else:
             await query.edit_message_text("❌ Ошибка", reply_markup=get_main_keyboard())
-    except:
-        await query.edit_message_text("❌ Ошибка", reply_markup=get_main_keyboard())
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}", reply_markup=get_main_keyboard())
 
-async def search_prompt(update, context):
+async def search_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("🔍 Введи ID заказа:")
     context.user_data['searching'] = True
 
-async def handle_search(update, context):
+async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('searching'):
         user_id = update.effective_user.id
         if user_id not in ADMIN_IDS:
@@ -207,6 +207,11 @@ async def handle_search(update, context):
         else:
             await update.message.reply_text("❌ Введи число")
         context.user_data['searching'] = False
+
+async def create_order_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await new_order(update, context)
 
 # ============= ЗАПУСК =============
 def run_flask():
@@ -218,17 +223,28 @@ if __name__ == '__main__':
     Thread(target=run_flask).start()
     
     print("🤖 ЗАПУСК БОТА")
+    print("=" * 40)
+    
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("new", new_order))
     app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("skip", skip))
+    
+    # Callback кнопки
     app.add_handler(CallbackQueryHandler(active_orders_callback, pattern="active_orders"))
     app.add_handler(CallbackQueryHandler(search_prompt, pattern="search_order"))
-    app.add_handler(CallbackQueryHandler(new_order, pattern="create_order"))
+    app.add_handler(CallbackQueryHandler(create_order_callback, pattern="create_order"))
+    
+    # Обработчики сообщений
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
     
-    print("✅ БОТ ЗАПУЩЕН!")
+    print(f"👑 Админы: {ADMIN_IDS}")
+    print(f"🌐 API: {FLASK_API_URL}")
+    print("✅ БОТ ЗАПУЩЕН! Ожидание сообщений...")
+    
+    # Запускаем бота
     app.run_polling(allowed_updates=Update.ALL_TYPES)
