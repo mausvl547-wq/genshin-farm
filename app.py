@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from datetime import datetime
 import secrets
@@ -11,20 +12,38 @@ import os
 
 app = Flask(__name__)
 
-# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ИСПРАВЛЕННЫЕ) =======================
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ - МАКСИМАЛЬНО ЖЕСТКИЙ ВАРИАНТ =======================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///database.db'
+# Если база данных не найдена (локально), используем SQLite
+if not DATABASE_URL:
+    DATABASE_URL = 'sqlite:///database.db'
+    engine = create_engine(DATABASE_URL, poolclass=NullPool, pool_pre_ping=True)
+else:
+    # Для PostgreSQL: принудительно создаем engine с NullPool и отключаем pooling
+    engine = create_engine(
+        DATABASE_URL,
+        poolclass=NullPool,      # Отключаем кэширование соединений
+        pool_pre_ping=True,      # Проверяем соединение перед каждым запросом
+        pool_size=1,             # Размер пула 1 (максимум)
+        max_overflow=0,          # Без дополнительных соединений
+        pool_timeout=30          # Таймаут ожидания соединения
+    )
+
+# Настраиваем приложение на использование созданного engine
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# КЛЮЧЕВЫЕ НАСТРОЙКИ ДЛЯ РЕШЕНИЯ ПРОБЛЕМЫ С ПУЛОМ СОЕДИНЕНИЙ
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'poolclass': NullPool,  # Отключаем кэширование соединений
-    'pool_pre_ping': True   # Проверяем соединение перед каждым запросом
+    'poolclass': NullPool,
+    'pool_pre_ping': True,
+    'pool_size': 1,
+    'max_overflow': 0
 }
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
+# ВАЖНО: Переопределяем db, чтобы он использовал наш engine
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -390,7 +409,7 @@ def api_top_chers():
     
     return jsonify(result)
 
-# ======================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ (ИСПРАВЛЕННАЯ) =======================
+# ======================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ =======================
 def init_db():
     with app.app_context():
         # Создаем все таблицы
