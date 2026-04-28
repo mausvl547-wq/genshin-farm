@@ -2,39 +2,27 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.pool import NullPool  # ДОБАВЛЕНО: для решения проблемы с пулом соединений
 from datetime import datetime
 import secrets
 import re
-import os  # ДОБАВЛЕНО: для работы с переменными окружения
+import os
+
 
 app = Flask(__name__)
 
-# Импортируем необходимые компоненты
-from sqlalchemy.pool import NullPool
-
-# Настройки базы данных (этот блок, скорее всего, уже есть у вас в коде)
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ИСПРАВЛЕНО) =======================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-# --- ЭТО ГЛАВНОЕ ИСПРАВЛЕНИЕ ---
-# Используем NullPool, который не хранит соединения между запросами.
-# Это решит проблему с пулом прямо сейчас.
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///database.db'
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'poolclass': NullPool,  # <-- Ключевая строка
-    'pool_pre_ping': True   # Проверять соединение перед использованием
-}
-# ------------------------------
-
-# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ДОБАВЛЕНО ДЛЯ RENDER) =======================
-DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
-    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-
-# Если на Render - используем PostgreSQL, если локально - SQLite
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# ДОБАВЛЕНО: Настройки для решения проблемы с пулом соединений
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'poolclass': NullPool,
+    'pool_pre_ping': True
+}
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
 db = SQLAlchemy(app)
@@ -404,10 +392,11 @@ def api_top_chers():
     
     return jsonify(result)
 
-# ======================= ИНИЦИАЛИЗАЦИЯ =======================
+# ======================= ИНИЦИАЛИЗАЦИЯ (ИСПРАВЛЕНО) =======================
 def init_db():
     with app.app_context():
         db.create_all()
+        print("✅ Таблицы базы данных созданы/проверены")
         
         # Создаем админа если нет
         admin = User.query.filter_by(email='admin@farm.com').first()
