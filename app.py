@@ -34,22 +34,23 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
-# ВАЖНО: Переопределяем db, чтобы он использовал наш engine
+# Создаем db
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 # ======================= МОДЕЛИ =======================
 class User(UserMixin, db.Model):
+    __tablename__ = 'user'  # Явно указываем имя таблицы
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)  # Почта
-    username = db.Column(db.String(80), unique=True, nullable=False)  # Никнейм
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), default='cher')  # 'cher' or 'admin'
+    role = db.Column(db.String(20), default='cher')
     total_earned = db.Column(db.Float, default=0.0)
     paid_out = db.Column(db.Float, default=0.0)
     balance = db.Column(db.Float, default=0.0)
-    telegram_id = db.Column(db.String(100), nullable=True)  # Для уведомлений
+    telegram_id = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
@@ -59,23 +60,21 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
     
     def generate_password(self):
-        """Генерирует случайный пароль"""
         password = secrets.token_urlsafe(8)
         self.set_password(password)
         return password
 
 class Order(db.Model):
+    __tablename__ = 'order'  # Явно указываем имя таблицы
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, nullable=False)
     reward = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(20), default='new')  # new, taken, completed
+    status = db.Column(db.String(20), default='new')
     taken_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     taken_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Связь с FunPay (опционально)
     funpay_url = db.Column(db.String(500), nullable=True)
     funpay_order_id = db.Column(db.String(100), nullable=True)
 
@@ -180,7 +179,6 @@ def add_user():
     email = request.form.get('email')
     username = request.form.get('username')
     
-    # Проверка на существование
     if User.query.filter_by(email=email).first():
         flash('❌ Пользователь с такой почтой уже существует')
         return redirect(url_for('admin_panel'))
@@ -189,12 +187,10 @@ def add_user():
         flash('❌ Пользователь с таким именем уже существует')
         return redirect(url_for('admin_panel'))
     
-    # Валидация email
     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
         flash('❌ Некорректный email')
         return redirect(url_for('admin_panel'))
     
-    # Создаем пользователя
     new_user = User(email=email, username=username, role='cher')
     generated_password = new_user.generate_password()
     db.session.add(new_user)
@@ -278,7 +274,6 @@ def pay_user(user_id):
 # ======================= API ДЛЯ ТЕЛЕГРАМ БОТА =======================
 @app.route('/api/bot/add_order', methods=['POST'])
 def api_add_order():
-    """Эндпоинт для бота: добавление заказа"""
     try:
         data = request.json
         title = data.get('title')
@@ -304,7 +299,6 @@ def api_add_order():
 
 @app.route('/api/bot/stats', methods=['GET'])
 def api_stats():
-    """Статистика для бота"""
     stats = {
         'total_orders': Order.query.count(),
         'completed_orders': Order.query.filter_by(status='completed').count(),
@@ -314,7 +308,6 @@ def api_stats():
 
 @app.route('/api/bot/order_info/<int:order_id>', methods=['GET'])
 def api_order_info(order_id):
-    """Информация о заказе: кто взял, статус"""
     order = Order.query.get(order_id)
     if not order:
         return jsonify({'error': 'Заказ не найден'}), 404
@@ -344,7 +337,6 @@ def api_order_info(order_id):
 
 @app.route('/api/bot/user_stats/<int:user_id>', methods=['GET'])
 def api_user_stats(user_id):
-    """Статистика пользователя по ID"""
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'Пользователь не найден'}), 404
@@ -365,7 +357,6 @@ def api_user_stats(user_id):
 
 @app.route('/api/bot/active_orders', methods=['GET'])
 def api_active_orders():
-    """Все активные заказы (кто взял)"""
     orders = Order.query.filter(Order.status.in_(['new', 'taken'])).all()
     result = []
     
@@ -387,7 +378,6 @@ def api_active_orders():
 
 @app.route('/api/bot/top_chers', methods=['GET'])
 def api_top_chers():
-    """Топ качеров по заработку"""
     chers = User.query.filter_by(role='cher').order_by(User.total_earned.desc()).limit(10).all()
     result = []
     
@@ -403,9 +393,9 @@ def api_top_chers():
 # ======================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ =======================
 def init_db():
     with app.app_context():
-        # Создаем все таблицы
+        # Принудительно создаем ВСЕ таблицы
         db.create_all()
-        print("✅ Таблицы проверены/созданы")
+        print("✅ Таблицы базы данных созданы/проверены")
         
         # Создаем админа, если его еще нет
         try:
@@ -435,6 +425,8 @@ def init_db():
                 print("[OK] Тестовый заказ создан")
             
             db.session.commit()
+            print("✅ Все данные успешно сохранены!")
+            
         except Exception as e:
             print(f"❌ Ошибка при инициализации данных: {e}")
             db.session.rollback()
