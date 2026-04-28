@@ -1,47 +1,49 @@
+import os
+import secrets
+import re
+from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
-from datetime import datetime
-import secrets
-import re
-import os
-
 
 app = Flask(__name__)
 
-# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ =======================
+# === НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К БД - NullPool НАВСЕГДА ===
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-# Если база данных не найдена (локально), используем SQLite
 if not DATABASE_URL:
     DATABASE_URL = 'sqlite:///database.db'
+    # Для SQLite NullPool не нужен, но оставим для простоты
     engine = create_engine(DATABASE_URL, poolclass=NullPool, pool_pre_ping=True)
 else:
-    # Для PostgreSQL: принудительно создаем engine с NullPool
+    # ПРИНУДИТЕЛЬНО отключаем пул соединений
     engine = create_engine(
         DATABASE_URL,
-        poolclass=NullPool,      # Отключаем кэширование соединений
-        pool_pre_ping=True       # Проверяем соединение перед каждым запросом
+        poolclass=NullPool,  # <- Главное: отключаем кэширование соединений
+        pool_pre_ping=True,  # Проверяем соединение перед использованием
     )
 
-# Настраиваем приложение
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'poolclass': NullPool,
+    'pool_pre_ping': True,
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
-# Создаем db
+# Переопределяем db, чтобы он использовал наш engine
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 # ======================= МОДЕЛИ =======================
 class User(UserMixin, db.Model):
-    __tablename__ = 'user'  # Явно указываем имя таблицы
+    __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -65,7 +67,7 @@ class User(UserMixin, db.Model):
         return password
 
 class Order(db.Model):
-    __tablename__ = 'order'  # Явно указываем имя таблицы
+    __tablename__ = 'order'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, nullable=False)
@@ -82,7 +84,7 @@ class Order(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ======================= МАРШРУТЫ =======================
+# ======================= МАРШРУТЫ (ваши, без изменений) =======================
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -196,7 +198,7 @@ def add_user():
     db.session.add(new_user)
     db.session.commit()
     
-    flash(f'✅ Пользователь {username} создан! Пароль: {generated_password} (сохраните и передайте пользователю)')
+    flash(f'✅ Пользователь {username} создан! Пароль: {generated_password}')
     return redirect(url_for('admin_panel'))
 
 @app.route('/admin/reset_password/<int:user_id>')
@@ -390,14 +392,14 @@ def api_top_chers():
     
     return jsonify(result)
 
-# ======================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ =======================
+# ======================= ИНИЦИАЛИЗАЦИЯ =======================
 def init_db():
     with app.app_context():
         # Принудительно создаем ВСЕ таблицы
         db.create_all()
-        print("✅ Таблицы базы данных созданы/проверены")
+        print("✅ Таблицы созданы/проверены")
         
-        # Создаем админа, если его еще нет
+        # Создаем админа и тестового пользователя
         try:
             admin = User.query.filter_by(email='admin@farm.com').first()
             if not admin:
@@ -406,7 +408,6 @@ def init_db():
                 db.session.add(admin)
                 print("[OK] Администратор admin@farm.com создан")
             
-            # Создаем тестового пользователя, если его нет
             test_cher = User.query.filter_by(email='cher@test.com').first()
             if not test_cher:
                 test_cher = User(email='cher@test.com', username='Люмин', role='cher')
@@ -414,7 +415,6 @@ def init_db():
                 db.session.add(test_cher)
                 print("[OK] Тестовый пользователь cher@test.com создан")
             
-            # Добавляем тестовый заказ, если нет заказов
             if Order.query.count() == 0:
                 test_order = Order(
                     title='🌿 Фарм цветов селезенки x20',
@@ -425,13 +425,12 @@ def init_db():
                 print("[OK] Тестовый заказ создан")
             
             db.session.commit()
-            print("✅ Все данные успешно сохранены!")
+            print("✅ Все данные сохранены!")
             
         except Exception as e:
-            print(f"❌ Ошибка при инициализации данных: {e}")
+            print(f"❌ Ошибка инициализации: {e}")
             db.session.rollback()
 
-# ======================= ЗАПУСК =======================
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5000))
