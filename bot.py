@@ -1,11 +1,11 @@
+# bot.py - ГОТОВАЯ РАБОЧАЯ ВЕРСИЯ
 import os
 import requests
-import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# ============= ТВОИ ДАННЫЕ =============
+# ============= НОВЫЙ ТОКЕН =============
 BOT_TOKEN = "8789024886:AAFLq4oyepyba8qa0l-URnXQ6gRSWl1kDYc"
 ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
@@ -25,7 +25,6 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ============= ОБРАБОТЧИКИ =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in ADMIN_IDS:
@@ -47,7 +46,6 @@ async def new_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Нет доступа")
         return
     
-    # Определяем откуда пришел вызов
     if update.callback_query:
         msg = update.callback_query.message
         await update.callback_query.answer()
@@ -226,7 +224,6 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ============= ЗАПУСК =============
 if __name__ == '__main__':
-    # Запускаем Flask в отдельном потоке
     from threading import Thread
     
     def run_flask():
@@ -236,15 +233,15 @@ if __name__ == '__main__':
     Thread(target=run_flask).start()
     
     print("=" * 50)
-    print("🤖 ЗАПУСК БОТА")
+    print("🤖 ЗАПУСК GENSHIN FARM BOT")
+    print("=" * 50)
     print(f"👑 Админы: {ADMIN_IDS}")
-    print(f"🌐 API: {FLASK_API_URL}")
+    print(f"🌐 API URL: {FLASK_API_URL}")
+    print(f"🔑 Токен: {BOT_TOKEN[:20]}...")
     print("=" * 50)
     
-    # Создаем и запускаем бота
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # Добавляем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("new", new_order))
     app.add_handler(CommandHandler("cancel", cancel))
@@ -255,7 +252,7 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
     
-    print("✅ БОТ ЗАПУЩЕН!")
+    print("✅ БОТ ЗАПУЩЕН! Ожидание сообщений...")
+    print("=" * 50)
     
-    # Запускаем бота (этот метод не завершается)
     app.run_polling()
