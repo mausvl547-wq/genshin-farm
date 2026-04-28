@@ -1,15 +1,13 @@
-# bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ (РАБОТАЕТ С КНОПКАМИ)
+# bot.py - С ПРИНУДИТЕЛЬНЫМ ЗАВЕРШЕНИЕМ СЕССИЙ
 import os
 import requests
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# ============= ТВОИ ДАННЫЕ =============
 BOT_TOKEN = "8789024886:AAFLq4oyepyba8qa0l-URnXQ6gRSWl1kDYc"
 ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
-# =====================================
 
 app_web = Flask(__name__)
 
@@ -17,7 +15,6 @@ app_web = Flask(__name__)
 def health():
     return "Bot is running", 200
 
-# ============= КЛАВИАТУРЫ =============
 def get_main_keyboard():
     keyboard = [
         [InlineKeyboardButton("➕ Создать заказ", callback_data="create_order")],
@@ -26,7 +23,6 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ============= ОБРАБОТЧИКИ =============
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in ADMIN_IDS:
@@ -44,7 +40,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Нет доступа")
 
 async def new_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /new и кнопки"""
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Нет доступа")
@@ -53,7 +48,6 @@ async def new_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data['step'] = 'title'
     
-    # Определяем откуда пришел вызов
     if update.callback_query:
         await update.callback_query.message.reply_text(
             "📝 *Создание нового заказа*\n\n"
@@ -90,7 +84,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     step = context.user_data.get('step')
     text = update.message.text.strip()
     
-    # Если не в режиме создания заказа
     if not step:
         if text.isdigit():
             await check_order(update, int(text))
@@ -110,7 +103,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
     
-    # Режим создания заказа
     if step == 'title':
         context.user_data['title'] = text
         context.user_data['step'] = 'price'
@@ -120,7 +112,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пример: `250` или `150.50`",
             parse_mode='Markdown'
         )
-    
     elif step == 'price':
         try:
             price = float(text.replace(',', '.'))
@@ -138,7 +129,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except ValueError:
             await update.message.reply_text("❌ Введи число (например: 250). Попробуй еще раз:")
-    
     elif step == 'description':
         context.user_data['description'] = text
         context.user_data['step'] = 'url'
@@ -148,7 +138,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пример: `https://funpay.com/orders/12345`",
             parse_mode='Markdown'
         )
-    
     elif step == 'url':
         url = text if "funpay.com" in text else ''
         await save_order(update, context, url)
@@ -158,7 +147,6 @@ async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ Нет доступа")
         return
-    
     await save_order(update, context, '')
 
 async def save_order(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str):
@@ -209,22 +197,17 @@ async def save_order(update: Update, context: ContextTypes.DEFAULT_TYPE, url: st
 async def check_order(update: Update, order_id: int):
     try:
         response = requests.get(f"{FLASK_API_URL}/order_info/{order_id}", timeout=5)
-        
         if response.status_code == 200:
             order = response.json()
-            
             status_emoji = {'new': '🆕', 'taken': '⚡', 'completed': '✅'}.get(order['status'], '❓')
             status_text = {'new': 'Новый', 'taken': 'В работе', 'completed': 'Выполнен'}.get(order['status'], order['status'])
-            
             message = f"{status_emoji} *Заказ #{order['id']}*\n\n"
             message += f"📋 *Название:* {order['title']}\n"
             message += f"💰 *Цена:* {order['reward']}₽\n"
             message += f"📊 *Статус:* {status_text}\n"
             message += f"📝 *Описание:* {order['description'][:150]}...\n"
-            
             if order.get('taken_by'):
                 message += f"\n👤 *Взял:* {order['taken_by']['username']}\n"
-            
             await update.message.reply_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
         else:
             await update.message.reply_text(f"❌ Заказ #{order_id} не найден", reply_markup=get_main_keyboard())
@@ -234,33 +217,26 @@ async def check_order(update: Update, order_id: int):
 async def active_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
     try:
         response = requests.get(f"{FLASK_API_URL}/active_orders", timeout=5)
         if response.status_code == 200:
             orders = response.json()
-            
             if not orders:
                 await query.edit_message_text("📭 Нет активных заказов", reply_markup=get_main_keyboard())
                 return
-            
             message = "📊 *Активные заказы*\n\n"
-            
             new_orders = [o for o in orders if o['status'] == 'new']
             taken_orders = [o for o in orders if o['status'] == 'taken']
-            
             if new_orders:
                 message += "🆕 *Новые:*\n"
                 for order in new_orders[:5]:
                     message += f"• #{order['id']} - {order['title'][:35]}... - {order['reward']}₽\n"
                 message += "\n"
-            
             if taken_orders:
                 message += "⚡ *В работе:*\n"
                 for order in taken_orders[:5]:
                     taken_by = order.get('taken_by', 'Неизвестно')
                     message += f"• #{order['id']} - {order['title'][:30]}... - {order['reward']}₽ 👤 {taken_by}\n"
-            
             await query.edit_message_text(message, parse_mode='Markdown', reply_markup=get_main_keyboard())
         else:
             await query.edit_message_text("❌ Ошибка получения данных", reply_markup=get_main_keyboard())
@@ -282,13 +258,11 @@ async def handle_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if user_id not in ADMIN_IDS:
             return
-        
         text = update.message.text
         if text.isdigit():
             await check_order(update, int(text))
         else:
             await update.message.reply_text("❌ Введи число (ID заказа)", reply_markup=get_main_keyboard())
-        
         context.user_data['awaiting_order_id'] = False
 
 # ============= ЗАПУСК =============
@@ -309,23 +283,35 @@ if __name__ == '__main__':
     
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Команды
+    # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("new", new_order_command))
     application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("skip", skip))
     
-    # Callback кнопки
     application.add_handler(CallbackQueryHandler(active_orders_callback, pattern="active_orders"))
     application.add_handler(CallbackQueryHandler(search_prompt, pattern="search_order"))
     application.add_handler(CallbackQueryHandler(new_order_command, pattern="create_order"))
     
-    # Обработчики сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_search))
     
     print("✅ БОТ ЗАПУЩЕН! Ожидание сообщений...")
     print("=" * 50)
     
-    # Запускаем бота
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Принудительно удаляем старые сессии и запускаем
+    async def start_bot():
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.bot.log_out()
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        print("✅ Все старые сессии завершены!")
+    
+    import asyncio
+    asyncio.run(start_bot())
+    
+    try:
+        asyncio.get_event_loop().run_forever()
+    except KeyboardInterrupt:
+        print("🛑 Бот остановлен")
