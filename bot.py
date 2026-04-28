@@ -1,4 +1,4 @@
-# bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ (БЕЗ ПОТОКОВ)
+# bot.py - ОКОНЧАТЕЛЬНО РАБОЧАЯ ВЕРСИЯ
 import os
 import requests
 import asyncio
@@ -12,7 +12,7 @@ ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
 # =====================================
 
-# Фейковое Flask-приложение для Render (для health check)
+# Фейковое Flask-приложение для Render
 app_web = Flask(__name__)
 
 @app_web.route('/')
@@ -99,10 +99,9 @@ async def check_order_by_id(update: Update, order_id: int):
 
 # ============= ЗАПУСК =============
 if __name__ == '__main__':
-    # Запускаем Flask в отдельном потоке, а бота в главном
+    # Запускаем Flask в отдельном потоке
     from threading import Thread
     
-    # Запускаем Flask сервер в фоне
     def run_flask():
         port = int(os.environ.get('PORT', 10000))
         app_web.run(host='0.0.0.0', port=port)
@@ -110,7 +109,7 @@ if __name__ == '__main__':
     flask_thread = Thread(target=run_flask)
     flask_thread.start()
     
-    # Запускаем бота в главном потоке
+    # Запускаем бота
     print("=" * 50)
     print("🤖 ЗАПУСК GENSHIN FARM BOT")
     print("=" * 50)
@@ -118,16 +117,24 @@ if __name__ == '__main__':
     print(f"🌐 API URL: {FLASK_API_URL}")
     print("=" * 50)
     
-    app = Application.builder().token(BOT_TOKEN).build()
+    # Создаем event loop для главного потока
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Удаляем вебхук
+    async def setup():
+        app = Application.builder().token(BOT_TOKEN).build()
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        print("✅ Вебхук удалён")
+        return app
+    
+    app = loop.run_until_complete(setup())
+    
+    # Добавляем обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Удаляем вебхук
-    async def delete_webhook():
-        await app.bot.delete_webhook(drop_pending_updates=True)
-        print("✅ Вебхук удалён")
-    
-    asyncio.run(delete_webhook())
-    
     print("✅ БОТ ЗАПУЩЕН! Ожидание сообщений...")
-    app.run_polling()
+    
+    # Запускаем бота
+    loop.run_until_complete(app.run_polling())
