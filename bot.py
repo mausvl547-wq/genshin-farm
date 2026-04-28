@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ============= ПЕРЕМЕННЫЕ (ТВОИ ДАННЫЕ) =============
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
+BOT_TOKEN = os.environ.get('8789024886:AAEoJN_Z1KqIQyiCgPsPgo6iGNpE-JvixHc')
 ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = os.environ.get('FLASK_API_URL', 'https://genshin-farm.onrender.com/api/bot')
 # =====================================
