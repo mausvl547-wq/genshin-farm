@@ -5,7 +5,7 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = "8789024886:AAEoJN_Z1KqIQyiCgPsPgo6iGNpE-JvixHc"
+BOT_TOKEN = "8789024886:AAFLq4oyepyba8qa0l-URnXQ6gRSWl1kDYc"
 ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
 
