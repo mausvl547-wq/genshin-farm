@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.pool import NullPool  # ДОБАВЛЕНО: для решения проблемы с пулом соединений
+from sqlalchemy.pool import NullPool
 from datetime import datetime
 import secrets
 import re
@@ -11,17 +11,17 @@ import os
 
 app = Flask(__name__)
 
-# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ИСПРАВЛЕНО) =======================
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ (ИСПРАВЛЕННЫЕ) =======================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# ДОБАВЛЕНО: Настройки для решения проблемы с пулом соединений
+# КЛЮЧЕВЫЕ НАСТРОЙКИ ДЛЯ РЕШЕНИЯ ПРОБЛЕМЫ С ПУЛОМ СОЕДИНЕНИЙ
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'poolclass': NullPool,
-    'pool_pre_ping': True
+    'poolclass': NullPool,  # Отключаем кэширование соединений
+    'pool_pre_ping': True   # Проверяем соединение перед каждым запросом
 }
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
@@ -302,7 +302,6 @@ def api_stats():
     }
     return jsonify(stats)
 
-# ======================= API ДЛЯ БОТА (НОВЫЕ ФУНКЦИИ) =======================
 @app.route('/api/bot/order_info/<int:order_id>', methods=['GET'])
 def api_order_info(order_id):
     """Информация о заказе: кто взял, статус"""
@@ -340,7 +339,6 @@ def api_user_stats(user_id):
     if not user:
         return jsonify({'error': 'Пользователь не найден'}), 404
     
-    # Заказы пользователя
     taken_orders = Order.query.filter_by(taken_by=user_id, status='taken').count()
     completed_orders = Order.query.filter_by(taken_by=user_id, status='completed').count()
     
@@ -392,39 +390,46 @@ def api_top_chers():
     
     return jsonify(result)
 
-# ======================= ИНИЦИАЛИЗАЦИЯ (ИСПРАВЛЕНО) =======================
+# ======================= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ (ИСПРАВЛЕННАЯ) =======================
 def init_db():
     with app.app_context():
+        # Создаем все таблицы
         db.create_all()
-        print("✅ Таблицы базы данных созданы/проверены")
+        print("✅ Таблицы проверены/созданы")
         
-        # Создаем админа если нет
-        admin = User.query.filter_by(email='admin@farm.com').first()
-        if not admin:
-            admin = User(email='admin@farm.com', username='Администратор', role='admin')
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print("[OK] Admin created: admin@farm.com / admin123")
-        
-        # Создаем тестового качера
-        test_cher = User.query.filter_by(email='cher@test.com').first()
-        if not test_cher:
-            test_cher = User(email='cher@test.com', username='Люмин', role='cher')
-            test_cher.set_password('cher123')
-            db.session.add(test_cher)
-            db.session.commit()
+        # Создаем админа, если его еще нет
+        try:
+            admin = User.query.filter_by(email='admin@farm.com').first()
+            if not admin:
+                admin = User(email='admin@farm.com', username='Администратор', role='admin')
+                admin.set_password('admin123')
+                db.session.add(admin)
+                print("[OK] Администратор admin@farm.com создан")
             
-            # Добавляем тестовый заказ
-            test_order = Order(
-                title='🌿 Фарм цветов селезенки x20',
-                description='Собрать 20 цветов селезенки в Ли Юэ. Локация: ущелье Миньюнь',
-                reward=250.0
-            )
-            db.session.add(test_order)
+            # Создаем тестового пользователя, если его нет
+            test_cher = User.query.filter_by(email='cher@test.com').first()
+            if not test_cher:
+                test_cher = User(email='cher@test.com', username='Люмин', role='cher')
+                test_cher.set_password('cher123')
+                db.session.add(test_cher)
+                print("[OK] Тестовый пользователь cher@test.com создан")
+            
+            # Добавляем тестовый заказ, если нет заказов
+            if Order.query.count() == 0:
+                test_order = Order(
+                    title='🌿 Фарм цветов селезенки x20',
+                    description='Собрать 20 цветов селезенки в Ли Юэ. Локация: ущелье Миньюнь',
+                    reward=250.0
+                )
+                db.session.add(test_order)
+                print("[OK] Тестовый заказ создан")
+            
             db.session.commit()
-            print("[OK] Test user and order created")
+        except Exception as e:
+            print(f"❌ Ошибка при инициализации данных: {e}")
+            db.session.rollback()
 
+# ======================= ЗАПУСК =======================
 if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5000))
