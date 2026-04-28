@@ -1,31 +1,30 @@
-import os
-import secrets
-import re
-from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
+from datetime import datetime
+import secrets
+import re
+import os
+
 
 app = Flask(__name__)
 
-# === НАСТРОЙКИ ПОДКЛЮЧЕНИЯ К БД - NullPool НАВСЕГДА ===
+# ======================= НАСТРОЙКИ БАЗЫ ДАННЫХ =======================
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
 if not DATABASE_URL:
     DATABASE_URL = 'sqlite:///database.db'
-    # Для SQLite NullPool не нужен, но оставим для простоты
     engine = create_engine(DATABASE_URL, poolclass=NullPool, pool_pre_ping=True)
 else:
-    # ПРИНУДИТЕЛЬНО отключаем пул соединений
     engine = create_engine(
         DATABASE_URL,
-        poolclass=NullPool,  # <- Главное: отключаем кэширование соединений
-        pool_pre_ping=True,  # Проверяем соединение перед использованием
+        poolclass=NullPool,
+        pool_pre_ping=True
     )
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -36,7 +35,6 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'genshin-super-secret-key-2025')
 
-# Переопределяем db, чтобы он использовал наш engine
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -84,7 +82,7 @@ class Order(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ======================= МАРШРУТЫ (ваши, без изменений) =======================
+# ======================= МАРШРУТЫ =======================
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -276,6 +274,7 @@ def pay_user(user_id):
 # ======================= API ДЛЯ ТЕЛЕГРАМ БОТА =======================
 @app.route('/api/bot/add_order', methods=['POST'])
 def api_add_order():
+    """Эндпоинт для бота: добавление заказа"""
     try:
         data = request.json
         title = data.get('title')
@@ -299,17 +298,9 @@ def api_add_order():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/bot/stats', methods=['GET'])
-def api_stats():
-    stats = {
-        'total_orders': Order.query.count(),
-        'completed_orders': Order.query.filter_by(status='completed').count(),
-        'total_earned': db.session.query(db.func.sum(User.total_earned)).scalar() or 0
-    }
-    return jsonify(stats)
-
 @app.route('/api/bot/order_info/<int:order_id>', methods=['GET'])
 def api_order_info(order_id):
+    """Информация о заказе: кто взял, статус"""
     order = Order.query.get(order_id)
     if not order:
         return jsonify({'error': 'Заказ не найден'}), 404
@@ -339,6 +330,7 @@ def api_order_info(order_id):
 
 @app.route('/api/bot/user_stats/<int:user_id>', methods=['GET'])
 def api_user_stats(user_id):
+    """Статистика пользователя по ID"""
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'Пользователь не найден'}), 404
@@ -359,6 +351,7 @@ def api_user_stats(user_id):
 
 @app.route('/api/bot/active_orders', methods=['GET'])
 def api_active_orders():
+    """Все активные заказы (кто взял)"""
     orders = Order.query.filter(Order.status.in_(['new', 'taken'])).all()
     result = []
     
@@ -380,6 +373,7 @@ def api_active_orders():
 
 @app.route('/api/bot/top_chers', methods=['GET'])
 def api_top_chers():
+    """Топ качеров по заработку"""
     chers = User.query.filter_by(role='cher').order_by(User.total_earned.desc()).limit(10).all()
     result = []
     
@@ -395,30 +389,28 @@ def api_top_chers():
 # ======================= ИНИЦИАЛИЗАЦИЯ =======================
 def init_db():
     with app.app_context():
-        # Принудительно создаем ВСЕ таблицы
         db.create_all()
         print("✅ Таблицы созданы/проверены")
         
-        # Создаем админа и тестового пользователя
         try:
             admin = User.query.filter_by(email='admin@farm.com').first()
             if not admin:
                 admin = User(email='admin@farm.com', username='Администратор', role='admin')
                 admin.set_password('admin123')
                 db.session.add(admin)
-                print("[OK] Администратор admin@farm.com создан")
+                print("[OK] Администратор создан")
             
             test_cher = User.query.filter_by(email='cher@test.com').first()
             if not test_cher:
                 test_cher = User(email='cher@test.com', username='Люмин', role='cher')
                 test_cher.set_password('cher123')
                 db.session.add(test_cher)
-                print("[OK] Тестовый пользователь cher@test.com создан")
+                print("[OK] Тестовый пользователь создан")
             
             if Order.query.count() == 0:
                 test_order = Order(
                     title='🌿 Фарм цветов селезенки x20',
-                    description='Собрать 20 цветов селезенки в Ли Юэ. Локация: ущелье Миньюнь',
+                    description='Собрать 20 цветов селезенки в Ли Юэ',
                     reward=250.0
                 )
                 db.session.add(test_order)
@@ -428,7 +420,7 @@ def init_db():
             print("✅ Все данные сохранены!")
             
         except Exception as e:
-            print(f"❌ Ошибка инициализации: {e}")
+            print(f"❌ Ошибка: {e}")
             db.session.rollback()
 
 if __name__ == '__main__':
