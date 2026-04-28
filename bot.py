@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # ============= НОВЫЙ ТОКЕН =============
-BOT_TOKEN = "8789024886:AAFLq4oyepyba8qa0l-URnXQ6gRSWl1kDYc"
+BOT_TOKEN = "8789024886:AAGUYGXclAk87RIh1JwaISHnNLMjsI55hGI"
 ADMIN_IDS = [1288498341, 6893022735]
 FLASK_API_URL = "https://genshin-farm.onrender.com/api/bot"
 # =====================================
